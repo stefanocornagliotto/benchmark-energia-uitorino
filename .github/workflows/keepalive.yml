@@ -1,47 +1,86 @@
 name: keep-alive-streamlit
 
-# Pinga l'app Streamlit Cloud per mantenerla "sveglia".
-# Streamlit Cloud manda in sleep le app free dopo ~7 giorni di inattività:
-# questo workflow simula visite periodiche e mantiene l'app sempre pronta.
+# Mantiene "sveglia" l'app Streamlit Cloud (che va in sleep dopo ~7 giorni
+# di inattivita' e a volte anche prima con la nuova policy).
 #
-# Frequenza: 2 volte al giorno (alle 08:00 e 20:00 UTC). L'orario è UTC,
-# non italiano — su GitHub Actions non si può usare il TZ locale.
-# GitHub Actions è gratuito per repo pubblici; nessuna configurazione extra.
+# Strategia in DUE step per esecuzione:
+#   1) STEP 1 — curl GET sull'URL principale (Streamlit deve rispondere 200
+#      con l'HTML della pagina, cioe' l'app runtime e' up). Se OK, chiudo.
+#   2) STEP 2 (fallback) — se lo step 1 NON risponde 200 entro alcuni
+#      tentativi, avvio un headless-browser Playwright che apre davvero
+#      la pagina: questa e' l'unica cosa che Streamlit Cloud riconosce
+#      sempre come "sessione attiva" (esegue il codice dell'app, non
+#      solo la home statica).
 #
-# Trigger manuale disponibile con workflow_dispatch (per test).
+# Frequenza: 2 volte al giorno (08:00 e 20:00 UTC = 10/22 IT estate,
+# 09/21 IT inverno). Puo' essere lanciato anche a mano da tab Actions.
 
 on:
   schedule:
-    - cron: "0 8,20 * * *"   # ogni giorno alle 08:00 e 20:00 UTC (10:00 e 22:00 IT estate; 09:00 e 21:00 IT inverno)
-  workflow_dispatch:          # permette esecuzione manuale dal tab Actions
+    - cron: "0 8,20 * * *"
+  workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
+    env:
+      APP_URL: "https://benchmark-energia-uitorino.streamlit.app/"
     steps:
-      - name: Ping app Streamlit Cloud
-        env:
-          APP_URL: "https://benchmark-energia-uitorino.streamlit.app/"
+      # ------------------------------------------------------------------
+      # STEP 1 — Ping HTTP sull'URL principale
+      # ------------------------------------------------------------------
+      - name: Step 1 — curl GET su URL principale
+        id: step1
         run: |
-          echo "Ping $APP_URL alle $(date -u)"
-          # Streamlit espone /_stcore/health che risponde 200 quando l'app è viva
-          # (o svegliata dopo lo sleep). Se sleep, la prima richiesta la sveglia
-          # ma potrebbe rispondere con 503 finché non finisce il boot: allora
-          # ripeto un paio di volte con backoff.
+          set +e
+          echo "Ping principale $APP_URL alle $(date -u)"
+          got_200="no"
           for attempt in 1 2 3 4; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" -L "$APP_URL/_stcore/health" || echo "000")
-            echo "  attempt $attempt: HTTP $code"
-            if [ "$code" = "200" ]; then
-              echo "App viva."
-              exit 0
+            code=$(curl -s -o /tmp/body.html -w "%{http_code}" -L --max-time 45 "$APP_URL" || echo "000")
+            size=$(wc -c < /tmp/body.html 2>/dev/null || echo 0)
+            echo "  attempt $attempt: HTTP $code  body=${size}b"
+            if [ "$code" = "200" ] && [ "$size" -gt 500 ]; then
+              got_200="yes"
+              break
             fi
             sleep 20
           done
-          # Se dopo 4 tentativi non è viva, provo l'URL principale (a volte
-          # /_stcore/health può essere disabilitato)
-          echo "Provo endpoint principale..."
-          code=$(curl -s -o /dev/null -w "%{http_code}" -L "$APP_URL" || echo "000")
-          echo "  root: HTTP $code"
-          # Non fallisco il workflow anche se lo status non è 200: l'importante
-          # è aver mandato la richiesta, che è quello che "sveglia" Streamlit.
+          echo "got_200=$got_200" >> "$GITHUB_OUTPUT"
+          if [ "$got_200" = "yes" ]; then
+            echo "Ping HTTP OK — nessun fallback necessario."
+          else
+            echo "Ping HTTP fallito — attivero' fallback Playwright."
+          fi
+
+      # ------------------------------------------------------------------
+      # STEP 2 — Fallback Playwright (solo se step 1 NON ha ottenuto 200)
+      # ------------------------------------------------------------------
+      - name: Step 2 (fallback) — apri la pagina con Playwright
+        if: steps.step1.outputs.got_200 != 'yes'
+        run: |
+          echo "Fallback headless browser (Playwright)"
+          python -m pip install --quiet playwright
+          python -m playwright install --with-deps chromium
+          python - <<'PY'
+          import os, sys, time
+          from playwright.sync_api import sync_playwright
+          url = os.environ["APP_URL"]
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              ctx = browser.new_context()
+              page = ctx.new_page()
+              try:
+                  page.goto(url, timeout=90_000, wait_until="load")
+                  # Cerco un elemento tipico di Streamlit; se compare, l'app runtime e' up.
+                  try:
+                      page.wait_for_selector('[data-testid="stAppViewContainer"]', timeout=60_000)
+                      print("App runtime attiva (elemento stAppViewContainer visibile)")
+                  except Exception:
+                      print("Elemento stAppViewContainer non trovato entro 60s (l'app potrebbe essersi svegliata comunque)")
+                  # Piccolo idle per far girare il runtime
+                  time.sleep(8)
+              finally:
+                  browser.close()
+          print("Fallback Playwright terminato.")
+          PY
