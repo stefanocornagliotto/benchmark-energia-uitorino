@@ -624,6 +624,7 @@ def _bench_periodo(commodity: str, tipologia=None, top_n: int = 10) -> float:
     cons_singolo_annuo_gas = None
     _cons_ann_tot = 0.0
     _n_ut_max = 0
+    _n_mesi_disp = 0
     for _m in mesi_disp:
         _dm = D.get("dati_per_mese", {}).get(_m)
         if not _dm:
@@ -631,11 +632,17 @@ def _bench_periodo(commodity: str, tipologia=None, top_n: int = 10) -> float:
         _recs = [r for r in _dm["confronto"] if r["commodity"] == commodity]
         if tipologia is not None:
             _recs = [r for r in _recs if r["tipologia"] == tipologia]
+        if not _recs:
+            continue
+        _n_mesi_disp += 1
         for _r in _recs:
             _cons_ann_tot += float(_r["consumo_mese"])
             _n_ut_max = max(_n_ut_max, int(_r["n_utenze"]))
-    if _n_ut_max > 0 and _cons_ann_tot > 0:
-        cons_singolo_annuo_gas = _cons_ann_tot / _n_ut_max
+    if _n_ut_max > 0 and _cons_ann_tot > 0 and _n_mesi_disp > 0:
+        # Annualizza: la somma sui mesi osservati va scalata a 12 mesi
+        # per rappresentare correttamente il consumo annuo per POD/PDR
+        # (la quota fissa delle offerte e' espressa in EUR/anno).
+        cons_singolo_annuo_gas = (_cons_ann_tot / _n_ut_max) * (12.0 / _n_mesi_disp)
 
     # Per ogni mese: prezzi di ciascuna offerta + consumo totale del mese
     # per la classe/tipologia richiesta.
