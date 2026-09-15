@@ -1164,8 +1164,8 @@ annuo</b> per ottenere un termine unitario €/MWh costante:<br><br>
 ({meta['coeff_perdita_BT']*100:.0f}&nbsp;% BT, {meta['coeff_perdita_MT']*100:.1f}&nbsp;% MT)
 e Ce,x è il consumo elettrico annuo della classe x.</i><br><br>
 &nbsp;&nbsp;&nbsp;🔥 <b>Prezzo mese Gas</b>:&nbsp;
-<code>P_mese = PSV + spread + altri_corr_var + (altri_corr_fissi × n_utenze) ÷ Cg,y</code>&nbsp;
-<i>con Cg,y consumo gas annuo della tipologia y</i>.<br><br>
+<code>P_mese = PSV + spread + altri_corr_var + (altri_corr_fissi × n_utenze) ÷ Cg,y</code><br>
+&nbsp;&nbsp;&nbsp;&nbsp;<i>dove Cg,y consumo gas annuo della tipologia y.</i><br><br>
 Quando si seleziona <b>"Tutti i periodi disponibili"</b>, il benchmark
 aggregato è costruito rispecchiando la <b>logica contrattuale della
 fornitura</b> (una singola offerta indicizzata è sottoscritta per l'intero
