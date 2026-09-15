@@ -1154,14 +1154,24 @@ Materia prima del gas è calcolato per ciascuna tipologia d'uso a partire dai
 prima" diviso per i Smc consumati del mese).</li>
 
 <li style="margin-bottom: 1.2rem;"><b>Mercato</b> — Per ogni offerta indicizzata
-raccolta il prezzo è ricostruito <b>per ciascun mese del periodo di osservazione</b>,
-distintamente per i due vettori:<br><br>
+raccolta il prezzo è ricostruito <b>per ciascun mese del periodo di osservazione</b>.
+La quota fissa dell'offerta (€/POD/anno o €/PDR/anno) viene ripartita sul
+<b>consumo annualizzato aggregato</b> della classe/tipologia:
+<code>C_ann = Σ_τ consumo(τ) × 12 / n_τ</code>, dove
+<code>n_τ</code> è il numero di mesi osservati (fattore <code>12/n_τ</code>
+= annualizzazione, coerente col fatto che la quota fissa è espressa in
+&euro;/anno). Il termine unitario risulta <b>costante mese per mese</b> per
+la classe/tipologia, mentre la parte variabile segue la stagionalità del
+PUN/PSV mensile:<br><br>
 &nbsp;&nbsp;&nbsp;⚡ <b>Prezzo mese EE</b>:&nbsp;
-<code>P_mese = PUNx + spread + altri_corr_var + (PUNx + spread) × k + (altri_corr_fissi × n_utenze) ÷ (12 × consumo_mensile)</code><br>
+<code>P_mese = PUNx + spread + altri_corr_var + (PUNx + spread) × k + (altri_corr_fissi × n_utenze) ÷ C_e,ann,x</code><br>
 &nbsp;&nbsp;&nbsp;&nbsp;<i>dove k è il coefficiente di perdite di rete
-({meta['coeff_perdita_BT']*100:.0f}&nbsp;% BT, {meta['coeff_perdita_MT']*100:.1f}&nbsp;% MT).</i><br><br>
+({meta['coeff_perdita_BT']*100:.0f}&nbsp;% BT, {meta['coeff_perdita_MT']*100:.1f}&nbsp;% MT)
+e C_e,ann,x = Σ_τ C_e(τ) × 12/n_τ è il consumo elettrico annualizzato della
+classe di potenza x.</i><br><br>
 &nbsp;&nbsp;&nbsp;🔥 <b>Prezzo mese Gas</b>:&nbsp;
-<code>P_mese = PSV + spread + altri_corr_var + (altri_corr_fissi × n_utenze) ÷ (12 × consumo_mensile)</code>.<br><br>
+<code>P_mese = PSV + spread + altri_corr_var + (altri_corr_fissi × n_utenze) ÷ C_g,ann</code>&nbsp;
+<i>con C_g,ann = Σ_τ C_g(τ) × 12/n_τ (consumo gas annualizzato della tipologia)</i>.<br><br>
 Quando si seleziona <b>"Tutti i periodi disponibili"</b>, il benchmark
 aggregato è costruito rispecchiando la <b>logica contrattuale della
 fornitura</b> (una singola offerta indicizzata è sottoscritta per l'intero
